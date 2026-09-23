@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Interplanetary Survival Guide: Martian Map</title>
+
+  <!-- Leaflet core (from CDN, no build step needed) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+      background: #0b0b0f;
+    }
+    #map {
+      width: 100%;
+      height: 100vh;
+      background: #0b0b0f;
+    }
+    #title-bar {
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      background: rgba(20, 15, 15, 0.85);
+      color: #e8a87c;
+      padding: 8px 18px;
+      border-radius: 8px;
+      font-size: 14px;
+      letter-spacing: 0.5px;
+      pointer-events: none;
+    }
+    #status {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      z-index: 1000;
+      background: rgba(20, 15, 15, 0.85);
+      color: #ccc;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      max-width: 320px;
+    }
+    .leaflet-tile {
+      /* Helps spot missing tiles while debugging */
+      outline: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="title-bar">🔴 Interplanetary Survival Guide — Martian Map (prototype)</div>
+  <div id="map"></div>
+  <div id="status">Loading Mars Viking Color Mosaic tiles from NASA Trek...</div>
+
+  <script>
+    // ---------------------------------------------------------
+    // STEP 1: Basic Mars basemap
+    // ---------------------------------------------------------
+    // Mars Trek serves tiles in a simple-cylindrical (equirectangular)
+    // projection, whose tiling scheme matches Leaflet's built-in
+    // EPSG:4326 CRS (NOT the default EPSG:3857 used for Earth/Google
+    // Maps). Using the wrong CRS here is the #1 reason a Mars Trek
+    // layer looks warped or misaligned, so this is set explicitly.
+
+    const map = L.map('map', {
+      crs: L.CRS.EPSG4326,
+      center: [0, 0],
+      zoom: 2,
+      minZoom: 1,
+      maxZoom: 8,
+      worldCopyJump: false
+    });
+
+    // NASA Mars Trek WMTS tile service.
+    // Layer: Mars_Viking_MDIM21_ClrMosaic_global_232m
+    // (the classic Viking color global mosaic — good general-purpose basemap)
+    const marsLayer = L.tileLayer(
+      'https://api.nasa.gov/mars-wmts/catalog/Mars_Viking_MDIM21_ClrMosaic_global_232m/1.0.0/default/default028mm/{z}/{y}/{x}.jpg',
+      {
+        attribution: 'Imagery: NASA / JPL / USGS — via Mars Trek',
+        tileSize: 256,
+        noWrap: true,
+        errorTileUrl: '' // avoid broken-image icons if a tile is missing
+      }
+    );
+
+    marsLayer.addTo(map);
+
+    // ---------------------------------------------------------
+    // Status / debug helper — tells you on-screen if tiles are
+    // actually loading, since a silent failure (blank grey map)
+    // is the most common first result.
+    // ---------------------------------------------------------
+    const statusEl = document.getElementById('status');
+    let loaded = 0;
+    let errored = 0;
+
+    marsLayer.on('tileload', () => {
+      loaded++;
+      statusEl.textContent = `Tiles loaded: ${loaded}${errored ? ` — errors: ${errored}` : ''}`;
+    });
+
+    marsLayer.on('tileerror', () => {
+      errored++;
+      statusEl.textContent = `Tiles loaded: ${loaded} — errors: ${errored} (check console / URL / CORS)`;
+    });
+
+    // Example marker: Jezero Crater (Perseverance landing site)
+    // — a real, well-known point of interest to sanity-check
+    // coordinates once the basemap is confirmed working.
+    L.marker([18.38, 77.58]).addTo(map)
+      .bindPopup('<b>Jezero Crater</b><br>Perseverance rover landing site (2021)');
+  </script>
+
+</body>
+</html>
