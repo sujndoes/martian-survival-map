@@ -60,6 +60,18 @@
   <div id="map"></div>
   <div id="status">Loading Mars Viking Color Mosaic tiles from NASA Trek...</div>
 
+  <button id="route-toggle" style="
+    position: absolute; top: 12px; left: 12px; z-index: 1000;
+    background: rgba(20,15,15,0.9); color: #e8a87c; border: 1px solid #e8a87c;
+    padding: 8px 14px; border-radius: 6px; font-size: 13px; cursor: pointer;
+  ">📍 Start Route Mode</button>
+
+  <div id="route-info" style="
+    display: none; position: absolute; top: 60px; left: 12px; z-index: 1000;
+    background: rgba(20,15,15,0.92); color: #eee; padding: 10px 14px;
+    border-radius: 6px; font-size: 13px; max-width: 260px; line-height: 1.5;
+  "></div>
+
   <script>
     // ---------------------------------------------------------
     // STEP 1: Basic Mars basemap
@@ -72,11 +84,29 @@
 
     const map = L.map('map', {
       crs: L.CRS.EPSG4326,
-      center: [0, 0],
-      zoom: 2,
       minZoom: 1,
       maxZoom: 8,
       worldCopyJump: false
+      // No fixed center/zoom here on purpose — fitBounds() below
+      // calculates the correct zoom automatically based on the
+      // actual browser window size, so the map fills the screen
+      // instead of leaving empty margins at a guessed zoom level.
+    });
+
+    // Full extent of Mars in this projection (all latitudes/longitudes)
+    const marsBounds = L.latLngBounds([-90, -180], [90, 180]);
+
+    // Prevent panning into empty space beyond the actual data
+    map.setMaxBounds(marsBounds);
+
+    // Fit the view to fill the container exactly, whatever size it is
+    map.fitBounds(marsBounds);
+
+    // Re-fit if the browser window is resized, so it keeps filling
+    // the screen rather than leaving stale margins
+    window.addEventListener('resize', () => {
+      map.invalidateSize();
+      map.fitBounds(marsBounds);
     });
 
     // NASA Mars Trek WMTS tile service.
@@ -95,29 +125,216 @@
     marsLayer.addTo(map);
 
     // ---------------------------------------------------------
-    // Status / debug helper — tells you on-screen if tiles are
-    // actually loading, since a silent failure (blank grey map)
-    // is the most common first result.
+    // STEP 2: Elevation layer (MOLA)
+    // ---------------------------------------------------------
+    // MOLA (Mars Orbiter Laser Altimeter) colorized shaded-relief
+    // elevation product, served from the same Mars Trek WMTS service.
+    // Added as a toggleable OVERLAY (not a base layer swap) so it can
+    // sit semi-transparent on top of the Viking imagery — matching
+    // the "Layers" toggle pattern from Google Maps.
+    const elevationLayer = L.tileLayer(
+      'https://api.nasa.gov/mars-wmts/catalog/Mars_MGS_MOLA_ClrShade_merge_global_463m/1.0.0/default/default028mm/{z}/{y}/{x}.jpg',
+      {
+        attribution: 'Elevation: NASA MGS/MOLA — via Mars Trek',
+        tileSize: 256,
+        noWrap: true,
+        opacity: 0.65 // semi-transparent so imagery underneath still shows through
+      }
+    );
+
+    // NOT added to the map by default — starts OFF, toggled on via
+    // the layer control below. This keeps the base imagery as the
+    // default clean view.
+
+    // ---------------------------------------------------------
+    // Layer control — top-right toggle box, same idea as Google
+    // Maps' "Layers" button. Lets you switch the elevation overlay
+    // on/off without touching the base imagery.
+    // ---------------------------------------------------------
+    L.control.layers(
+      null, // no base-layer switcher needed yet (only one base layer so far)
+      { 'MOLA Elevation': elevationLayer },
+      { collapsed: false, position: 'topright' }
+    ).addTo(map);
+
+    // ---------------------------------------------------------
+    // Status / debug helper — tracks BOTH layers separately so you
+    // can tell at a glance which one (if any) is failing to load.
     // ---------------------------------------------------------
     const statusEl = document.getElementById('status');
-    let loaded = 0;
-    let errored = 0;
+    const counts = {
+      imagery: { loaded: 0, errored: 0 },
+      elevation: { loaded: 0, errored: 0 }
+    };
 
-    marsLayer.on('tileload', () => {
-      loaded++;
-      statusEl.textContent = `Tiles loaded: ${loaded}${errored ? ` — errors: ${errored}` : ''}`;
+    function updateStatus() {
+      statusEl.textContent =
+        `Imagery — loaded: ${counts.imagery.loaded}, errors: ${counts.imagery.errored} | ` +
+        `Elevation — loaded: ${counts.elevation.loaded}, errors: ${counts.elevation.errored}`;
+    }
+
+    marsLayer.on('tileload', () => { counts.imagery.loaded++; updateStatus(); });
+    marsLayer.on('tileerror', () => { counts.imagery.errored++; updateStatus(); });
+    elevationLayer.on('tileload', () => { counts.elevation.loaded++; updateStatus(); });
+    elevationLayer.on('tileerror', () => { counts.elevation.errored++; updateStatus(); });
+
+    updateStatus();
+
+    // ---------------------------------------------------------
+    // STEP 3: Points of interest + click-to-show info
+    // ---------------------------------------------------------
+    // A small hand-curated set of real, known Mars locations with
+    // real published data. Kept as a plain array (not a separate
+    // file) since there are only a handful — easy to extend later.
+    const pointsOfInterest = [
+      {
+        name: 'Jezero Crater',
+        lat: 18.38, lon: 77.58,
+        elevation_m: -2600,
+        note: 'Perseverance rover landing site (2021). Ancient river delta, prime astrobiology target.'
+      },
+      {
+        name: 'Olympus Mons',
+        lat: 18.65, lon: -133.8,
+        elevation_m: 21900,
+        note: 'Largest known volcano in the solar system — roughly 2.5x the height of Everest.'
+      },
+      {
+        name: 'Valles Marineris (central)',
+        lat: -14.0, lon: -59.2,
+        elevation_m: -4000,
+        note: 'Vast canyon system, over 4,000 km long — dwarfs Earth\'s Grand Canyon.'
+      },
+      {
+        name: 'Gale Crater',
+        lat: -5.4, lon: 137.8,
+        elevation_m: -4500,
+        note: 'Curiosity rover landing site (2012). Layered sedimentary terrain at Mount Sharp.'
+      }
+    ];
+
+    pointsOfInterest.forEach(poi => {
+      L.marker([poi.lat, poi.lon]).addTo(map)
+        .bindPopup(
+          `<b>${poi.name}</b><br>` +
+          `Elevation: ${poi.elevation_m.toLocaleString()} m (relative to Mars datum)<br>` +
+          `Lat/Lon: ${poi.lat.toFixed(2)}, ${poi.lon.toFixed(2)}<br>` +
+          `<span style="font-size:12px; color:#555;">${poi.note}</span>`
+        );
     });
 
-    marsLayer.on('tileerror', () => {
-      errored++;
-      statusEl.textContent = `Tiles loaded: ${loaded} — errors: ${errored} (check console / URL / CORS)`;
+    // ---------------------------------------------------------
+    // Click-anywhere info: shows precise coordinates for any point
+    // clicked, since we can't extract a numeric value from the
+    // rendered image tiles themselves without a separate data API.
+    // ---------------------------------------------------------
+    map.on('click', (e) => {
+      if (routeModeActive) {
+        handleRouteClick(e.latlng);
+        return;
+      }
+
+      const lat = e.latlng.lat.toFixed(3);
+      const lon = e.latlng.lng.toFixed(3);
+
+      L.popup()
+        .setLatLng(e.latlng)
+        .setContent(
+          `<b>Clicked location</b><br>` +
+          `Lat: ${lat}, Lon: ${lon}<br>` +
+          `<span style="font-size:11px; color:#666;">` +
+          `Precise elevation values aren't available for arbitrary clicks in this ` +
+          `prototype — pins show real data for known sites.</span>`
+        )
+        .openOn(map);
     });
 
-    // Example marker: Jezero Crater (Perseverance landing site)
-    // — a real, well-known point of interest to sanity-check
-    // coordinates once the basemap is confirmed working.
-    L.marker([18.38, 77.58]).addTo(map)
-      .bindPopup('<b>Jezero Crater</b><br>Perseverance rover landing site (2021)');
+    // ---------------------------------------------------------
+    // STEP 4: Route tool
+    // ---------------------------------------------------------
+    // Route mode: click two points to draw a line and get the
+    // real great-circle distance between them, computed using
+    // Mars' actual mean radius (not Earth's — a common mistake).
+    const MARS_RADIUS_KM = 3389.5;
+
+    let routeModeActive = false;
+    let routePoints = [];       // up to 2 L.LatLng points
+    let routeMarkers = [];      // their markers
+    let routeLine = null;       // the drawn line
+
+    const routeToggleBtn = document.getElementById('route-toggle');
+    const routeInfoEl = document.getElementById('route-info');
+
+    routeToggleBtn.addEventListener('click', () => {
+      routeModeActive = !routeModeActive;
+      routeToggleBtn.textContent = routeModeActive
+        ? '✖ Exit Route Mode'
+        : '📍 Start Route Mode';
+      routeToggleBtn.style.borderColor = routeModeActive ? '#4caf50' : '#e8a87c';
+      routeToggleBtn.style.color = routeModeActive ? '#4caf50' : '#e8a87c';
+
+      if (routeModeActive) {
+        clearRoute();
+        routeInfoEl.style.display = 'block';
+        routeInfoEl.textContent = 'Click a start point on the map.';
+      } else {
+        routeInfoEl.style.display = 'none';
+      }
+    });
+
+    function clearRoute() {
+      routePoints = [];
+      routeMarkers.forEach(m => map.removeLayer(m));
+      routeMarkers = [];
+      if (routeLine) {
+        map.removeLayer(routeLine);
+        routeLine = null;
+      }
+    }
+
+    function handleRouteClick(latlng) {
+      if (routePoints.length >= 2) {
+        // Third click after a completed route resets and starts a new one
+        clearRoute();
+      }
+
+      routePoints.push(latlng);
+      const marker = L.circleMarker(latlng, {
+        radius: 7, color: '#4caf50', fillColor: '#4caf50', fillOpacity: 0.9
+      }).addTo(map);
+      routeMarkers.push(marker);
+
+      if (routePoints.length === 1) {
+        routeInfoEl.textContent = 'Start point set. Click an end point.';
+      } else if (routePoints.length === 2) {
+        routeLine = L.polyline(routePoints, { color: '#4caf50', weight: 3, dashArray: '6 6' })
+          .addTo(map);
+
+        const distanceKm = marsSurfaceDistance(routePoints[0], routePoints[1]);
+
+        routeInfoEl.innerHTML =
+          `<b>Route</b><br>` +
+          `Start: ${routePoints[0].lat.toFixed(2)}, ${routePoints[0].lng.toFixed(2)}<br>` +
+          `End: ${routePoints[1].lat.toFixed(2)}, ${routePoints[1].lng.toFixed(2)}<br>` +
+          `Distance: <b>${distanceKm.toFixed(1)} km</b> (straight-line, Mars surface)<br>` +
+          `<span style="font-size:11px; color:#999;">Elevation-change-along-route ` +
+          `requires point elevation data not yet available in this prototype.</span><br>` +
+          `<span style="font-size:11px; color:#999;">Click anywhere to start a new route.</span>`;
+      }
+    }
+
+    // Great-circle distance between two lat/lon points, along
+    // Mars' actual surface (haversine formula, Mars radius).
+    function marsSurfaceDistance(p1, p2) {
+      const toRad = deg => deg * Math.PI / 180;
+      const dLat = toRad(p2.lat - p1.lat);
+      const dLon = toRad(p2.lng - p1.lng);
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(p1.lat)) * Math.cos(toRad(p2.lat)) * Math.sin(dLon / 2) ** 2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return MARS_RADIUS_KM * c;
+    }
   </script>
 
 </body>
