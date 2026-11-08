@@ -10,6 +10,13 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 
   <style>
+    :root {
+      --panel-bg: rgba(20, 15, 15, 0.88);
+      --accent: #e8a87c;
+      --ok: #4caf50;
+      --text: #eee;
+      --muted: #aaa;
+    }
     html, body {
       margin: 0;
       padding: 0;
@@ -22,55 +29,195 @@
       height: 100vh;
       background: #0b0b0f;
     }
+
+    /* ---------- Top bar ---------- */
     #title-bar {
       position: absolute;
       top: 12px;
       left: 50%;
       transform: translateX(-50%);
       z-index: 1000;
-      background: rgba(20, 15, 15, 0.85);
-      color: #e8a87c;
+      background: var(--panel-bg);
+      color: var(--accent);
       padding: 8px 18px;
       border-radius: 8px;
       font-size: 14px;
       letter-spacing: 0.5px;
       pointer-events: none;
+      white-space: nowrap;
     }
-    #status {
+
+    /* ---------- Left panel: route + jump-to ---------- */
+    #left-panel {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 230px;
+    }
+    .panel {
+      background: var(--panel-bg);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .panel label {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 4px;
+    }
+    #poi-select {
+      width: 100%;
+      background: #1b1414;
+      color: var(--text);
+      border: 1px solid #5a4636;
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-size: 13px;
+    }
+    #route-toggle {
+      background: var(--panel-bg);
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      text-align: left;
+    }
+    #route-toggle:hover { background: rgba(60, 40, 30, 0.95); }
+    #route-toggle.active { color: var(--ok); border-color: var(--ok); }
+    #route-info { display: none; }
+
+    /* ---------- Bottom-left stack: legend, sources, status bar ---------- */
+    #bottom-left {
       position: absolute;
       bottom: 12px;
       left: 12px;
       z-index: 1000;
-      background: rgba(20, 15, 15, 0.85);
-      color: #ccc;
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-size: 12px;
-      max-width: 320px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-width: 340px;
     }
-    .leaflet-tile {
-      /* Helps spot missing tiles while debugging */
-      outline: none;
+    #legend { display: none; }
+    #legend .bar {
+      height: 12px;
+      border-radius: 6px;
+      background: linear-gradient(to right,
+        #5b2a86, #2d4fd6, #2fb5c9, #3fae49, #e8d52f, #f08a24, #d83a2a, #ffffff);
+      margin: 4px 0;
+    }
+    #legend .ends {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    #legend .fine { font-size: 10px; color: #888; margin-top: 4px; }
+    #sources { display: none; font-size: 12px; }
+    #sources ul { margin: 6px 0 0; padding-left: 18px; }
+    #sources a, .leaflet-popup-content a { color: #7ab8ff; }
+    #sources a:visited, .leaflet-popup-content a:visited { color: #b69be6; }
+
+    #status-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      color: #ccc;
+    }
+    #status-bar .chip {
+      background: var(--panel-bg);
+      padding: 5px 10px;
+      border-radius: 6px;
+    }
+    #coords { font-variant-numeric: tabular-nums; min-width: 170px; }
+    #sources-btn {
+      background: var(--panel-bg);
+      color: var(--accent);
+      border: 1px solid #5a4636;
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    #loading { display: none; align-items: center; gap: 8px; }
+    #loading.show { display: inline-flex; }
+    .spinner {
+      width: 12px;
+      height: 12px;
+      border: 2px solid #6b5444;
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .leaflet-control-layers {
+      background: var(--panel-bg);
+      color: var(--text);
+      border: none;
+    }
+    .poi-source { font-size: 11px; color: #666; margin-top: 4px; display: block; }
+
+    /* Narrow screens: shrink the left panel and drop the title */
+    @media (max-width: 640px) {
+      #title-bar { display: none; }
+      #left-panel { width: 190px; }
     }
   </style>
 </head>
 <body>
 
-  <div id="title-bar">🔴 Interplanetary Survival Guide — Martian Map (prototype)</div>
+  <div id="title-bar">🔴 Interplanetary Survival Guide — Martian Map</div>
   <div id="map"></div>
-  <div id="status">Loading Mars Viking Color Mosaic tiles from NASA Trek...</div>
 
-  <button id="route-toggle" style="
-    position: absolute; top: 12px; left: 12px; z-index: 1000;
-    background: rgba(20,15,15,0.9); color: #e8a87c; border: 1px solid #e8a87c;
-    padding: 8px 14px; border-radius: 6px; font-size: 13px; cursor: pointer;
-  ">📍 Start Route Mode</button>
+  <div id="left-panel">
+    <div class="panel">
+      <label for="poi-select">Jump to a site</label>
+      <select id="poi-select" aria-label="Jump to a point of interest">
+        <option value="">Choose a location…</option>
+      </select>
+    </div>
+    <button id="route-toggle" type="button">📍 Start Route Mode</button>
+    <div id="route-info" class="panel" aria-live="polite"></div>
+  </div>
 
-  <div id="route-info" style="
-    display: none; position: absolute; top: 60px; left: 12px; z-index: 1000;
-    background: rgba(20,15,15,0.92); color: #eee; padding: 10px 14px;
-    border-radius: 6px; font-size: 13px; max-width: 260px; line-height: 1.5;
-  "></div>
+  <div id="bottom-left">
+    <div id="legend" class="panel">
+      <div><b>MOLA elevation</b></div>
+      <div class="bar"></div>
+      <div class="ends"><span>Low (Hellas floor ≈ −7.2 km)</span><span>High (Olympus Mons ≈ +21.9 km)</span></div>
+      <div class="fine">Colors are qualitative: they show relative height, not exact values.</div>
+    </div>
+
+    <div id="sources" class="panel">
+      <b>Data &amp; credits</b>
+      <ul>
+        <li>Base imagery: Viking MDIM 2.1 Color Mosaic (232 m/px), NASA / JPL / USGS, via NASA Mars Trek.</li>
+        <li>Elevation overlay: Mars Global Surveyor MOLA colorized shaded relief (463 m/px), NASA, via NASA Mars Trek.</li>
+        <li>Map library: <a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a> 1.9.4 (BSD-2-Clause).</li>
+        <li>Site figures: each marker's popup links its source.</li>
+        <li>Route distance: haversine formula, Mars mean radius 3,389.5 km.</li>
+      </ul>
+    </div>
+
+    <div id="status-bar">
+      <span id="loading" class="chip" role="status"><span class="spinner"></span><span>Loading Mars tiles…</span></span>
+      <span id="coords" class="chip">Hover the map for coordinates</span>
+      <button id="sources-btn" type="button" aria-expanded="false">ℹ Data &amp; credits</button>
+    </div>
+  </div>
 
   <script>
     // ---------------------------------------------------------
@@ -86,12 +233,12 @@
       crs: L.CRS.EPSG4326,
       minZoom: 1,
       maxZoom: 8,
-      worldCopyJump: false
-      // No fixed center/zoom here on purpose — fitBounds() below
-      // calculates the correct zoom automatically based on the
-      // actual browser window size, so the map fills the screen
-      // instead of leaving empty margins at a guessed zoom level.
+      worldCopyJump: false,
+      // The default zoom buttons sit top-left, where the route/jump
+      // panel lives, so they are re-added bottom-right below.
+      zoomControl: false
     });
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
 
     // Full extent of Mars in this projection (all latitudes/longitudes)
     const marsBounds = L.latLngBounds([-90, -180], [90, 180]);
@@ -121,7 +268,6 @@
         errorTileUrl: '' // avoid broken-image icons if a tile is missing
       }
     );
-
     marsLayer.addTo(map);
 
     // ---------------------------------------------------------
@@ -130,8 +276,7 @@
     // MOLA (Mars Orbiter Laser Altimeter) colorized shaded-relief
     // elevation product, served from the same Mars Trek WMTS service.
     // Added as a toggleable OVERLAY (not a base layer swap) so it can
-    // sit semi-transparent on top of the Viking imagery — matching
-    // the "Layers" toggle pattern from Google Maps.
+    // sit semi-transparent on top of the Viking imagery.
     const elevationLayer = L.tileLayer(
       'https://api.nasa.gov/mars-wmts/catalog/Mars_MGS_MOLA_ClrShade_merge_global_463m/1.0.0/default/default028mm/{z}/{y}/{x}.jpg',
       {
@@ -141,86 +286,136 @@
         opacity: 0.65 // semi-transparent so imagery underneath still shows through
       }
     );
+    // Starts OFF; toggled on via the layer control below.
 
-    // NOT added to the map by default — starts OFF, toggled on via
-    // the layer control below. This keeps the base imagery as the
-    // default clean view.
-
-    // ---------------------------------------------------------
-    // Layer control — top-right toggle box, same idea as Google
-    // Maps' "Layers" button. Lets you switch the elevation overlay
-    // on/off without touching the base imagery.
-    // ---------------------------------------------------------
     L.control.layers(
-      null, // no base-layer switcher needed yet (only one base layer so far)
+      null,
       { 'MOLA Elevation': elevationLayer },
       { collapsed: false, position: 'topright' }
     ).addTo(map);
 
     // ---------------------------------------------------------
-    // Status / debug helper — tracks BOTH layers separately so you
-    // can tell at a glance which one (if any) is failing to load.
+    // Elevation legend: only visible while the overlay is on
     // ---------------------------------------------------------
-    const statusEl = document.getElementById('status');
-    const counts = {
-      imagery: { loaded: 0, errored: 0 },
-      elevation: { loaded: 0, errored: 0 }
-    };
+    const legendEl = document.getElementById('legend');
+    map.on('overlayadd', e => { if (e.layer === elevationLayer) legendEl.style.display = 'block'; });
+    map.on('overlayremove', e => { if (e.layer === elevationLayer) legendEl.style.display = 'none'; });
 
-    function updateStatus() {
-      statusEl.textContent =
-        `Imagery — loaded: ${counts.imagery.loaded}, errors: ${counts.imagery.errored} | ` +
-        `Elevation — loaded: ${counts.elevation.loaded}, errors: ${counts.elevation.errored}`;
+    // ---------------------------------------------------------
+    // Loading indicator: spinner while either layer is fetching tiles
+    // ---------------------------------------------------------
+    // Tiles near the map edge that don't exist return errors; these are
+    // expected, so they're only logged to the console, not shown.
+    const loadingEl = document.getElementById('loading');
+    const busyLayers = new Set();
+    function refreshLoading() {
+      loadingEl.classList.toggle('show', busyLayers.size > 0);
     }
+    [['imagery', marsLayer], ['elevation', elevationLayer]].forEach(([name, layer]) => {
+      layer.on('loading', () => { busyLayers.add(name); refreshLoading(); });
+      layer.on('load', () => { busyLayers.delete(name); refreshLoading(); });
+      layer.on('tileerror', e => console.debug(`[${name}] tile failed:`, e.coords));
+    });
+    busyLayers.add('imagery');   // initial load: spinner shows right away
+    refreshLoading();
 
-    marsLayer.on('tileload', () => { counts.imagery.loaded++; updateStatus(); });
-    marsLayer.on('tileerror', () => { counts.imagery.errored++; updateStatus(); });
-    elevationLayer.on('tileload', () => { counts.elevation.loaded++; updateStatus(); });
-    elevationLayer.on('tileerror', () => { counts.elevation.errored++; updateStatus(); });
+    // ---------------------------------------------------------
+    // Live coordinate readout (hover)
+    // ---------------------------------------------------------
+    const coordsEl = document.getElementById('coords');
+    const fmtLat = lat => `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? 'N' : 'S'}`;
+    const fmtLon = lon => `${Math.abs(lon).toFixed(2)}°${lon >= 0 ? 'E' : 'W'}`;
+    map.on('mousemove', e => {
+      coordsEl.textContent = `${fmtLat(e.latlng.lat)}, ${fmtLon(e.latlng.lng)}`;
+    });
+    map.on('mouseout', () => { coordsEl.textContent = 'Hover the map for coordinates'; });
 
-    updateStatus();
+    // ---------------------------------------------------------
+    // Data & credits panel toggle
+    // ---------------------------------------------------------
+    const sourcesBtn = document.getElementById('sources-btn');
+    const sourcesEl = document.getElementById('sources');
+    sourcesBtn.addEventListener('click', () => {
+      const open = sourcesEl.style.display !== 'block';
+      sourcesEl.style.display = open ? 'block' : 'none';
+      sourcesBtn.setAttribute('aria-expanded', String(open));
+    });
 
     // ---------------------------------------------------------
     // STEP 3: Points of interest + click-to-show info
     // ---------------------------------------------------------
-    // A small hand-curated set of real, known Mars locations with
-    // real published data. Kept as a plain array (not a separate
-    // file) since there are only a handful — easy to extend later.
+    // Each site lists the figure it shows, where that figure comes from,
+    // and a link to the source. Coordinates are approximate feature
+    // centers (good for placing a marker, not for navigation).
+    // Elevations are meters relative to the Mars datum (areoid).
     const pointsOfInterest = [
       {
         name: 'Jezero Crater',
-        lat: 18.38, lon: 77.58,
-        elevation_m: -2600,
-        note: 'Perseverance rover landing site (2021). Ancient river delta, prime astrobiology target.'
+        lat: 18.38, lon: 77.58, zoom: 5,
+        stat: 'Crater floor: about 2,700 m below the datum',
+        note: 'Perseverance rover landing site (2021). Ancient river delta, prime astrobiology target.',
+        source: { label: 'DLR / Mars Express HRSC topography of Jezero', url: 'https://www.dlr.de/en/latest/news/2020/03/20200929_topography-of-jezero-crater' }
       },
       {
         name: 'Olympus Mons',
-        lat: 18.65, lon: -133.8,
-        elevation_m: 21900,
-        note: 'Largest known volcano in the solar system — roughly 2.5x the height of Everest.'
+        lat: 18.65, lon: -133.8, zoom: 4,
+        stat: 'Summit: over 21.9 km above the datum (MOLA)',
+        note: 'Tallest known volcano in the solar system. Local relief from the foot of its northwest cliffs is over 21 km.',
+        source: { label: 'Wikipedia: Olympus Mons (citing MOLA)', url: 'https://en.wikipedia.org/wiki/Olympus_Mons' }
       },
       {
-        name: 'Valles Marineris (central)',
-        lat: -14.0, lon: -59.2,
-        elevation_m: -4000,
-        note: 'Vast canyon system, over 4,000 km long — dwarfs Earth\'s Grand Canyon.'
+        name: 'Valles Marineris',
+        lat: -13.9, lon: -59.2, zoom: 3,
+        stat: 'Length about 4,000 km; depth up to about 10 km',
+        note: 'Canyon system just south of the equator. Melas Chasma holds its deepest point.',
+        source: { label: 'Space.com: Valles Marineris facts', url: 'https://www.space.com/20446-valles-marineris.html' }
       },
       {
         name: 'Gale Crater',
-        lat: -5.4, lon: 137.8,
-        elevation_m: -4500,
-        note: 'Curiosity rover landing site (2012). Layered sedimentary terrain at Mount Sharp.'
+        lat: -5.4, lon: 137.8, zoom: 5,
+        stat: 'Northwest crater floor: minimum about 4,670 m below the datum (MOLA areoid)',
+        note: 'Curiosity rover landing site (2012), at the foot of the layered mound Aeolis Mons (Mount Sharp).',
+        source: { label: 'Gale crater: the Mars Science Laboratory/Curiosity rover landing site (Int. J. Astrobiology)', url: 'https://core-cms.cambridgecore.org/core/services/aop-cambridge-core/content/view/61967227D1AAFCE4E5CE1CE0620C78B0/S1473550412000328a.pdf/gale-crater-the-mars-science-laboratorycuriosity-rover-landing-site.pdf' }
+      },
+      {
+        name: 'Hellas Planitia',
+        lat: -42.4, lon: 70.5, zoom: 3,
+        stat: 'Floor: about 7,152 m below the datum',
+        note: 'Giant impact basin, roughly 2,300 km across. Among the lowest places on Mars.',
+        source: { label: 'Wikipedia: Hellas Planitia', url: 'https://en.wikipedia.org/wiki/Hellas_Planitia' }
       }
     ];
 
-    pointsOfInterest.forEach(poi => {
-      L.marker([poi.lat, poi.lon]).addTo(map)
-        .bindPopup(
-          `<b>${poi.name}</b><br>` +
-          `Elevation: ${poi.elevation_m.toLocaleString()} m (relative to Mars datum)<br>` +
-          `Lat/Lon: ${poi.lat.toFixed(2)}, ${poi.lon.toFixed(2)}<br>` +
-          `<span style="font-size:12px; color:#555;">${poi.note}</span>`
-        );
+    const poiSelect = document.getElementById('poi-select');
+    const poiMarkers = [];
+
+    pointsOfInterest.forEach((poi, i) => {
+      const popupHtml =
+        `<b>${poi.name}</b><br>` +
+        `${poi.stat}<br>` +
+        `Lat/Lon: ${fmtLat(poi.lat)}, ${fmtLon(poi.lon)}<br>` +
+        `<span style="font-size:12px; color:#555;">${poi.note}</span>` +
+        `<span class="poi-source">Source: <a href="${poi.source.url}" target="_blank" rel="noopener">${poi.source.label}</a></span>`;
+
+      const marker = L.marker([poi.lat, poi.lon], { title: poi.name })
+        .addTo(map)
+        .bindPopup(popupHtml, { maxWidth: 280 });
+      poiMarkers.push(marker);
+
+      const opt = document.createElement('option');
+      opt.value = String(i);
+      opt.textContent = poi.name;
+      poiSelect.appendChild(opt);
+    });
+
+    // Jump list: fly to the site, then open its popup
+    poiSelect.addEventListener('change', () => {
+      if (poiSelect.value === '') return;
+      const i = Number(poiSelect.value);
+      const poi = pointsOfInterest[i];
+      map.flyTo([poi.lat, poi.lon], poi.zoom, { duration: 1.2 });
+      map.once('moveend', () => poiMarkers[i].openPopup());
+      poiSelect.value = ''; // reset so the same site can be picked again later
     });
 
     // ---------------------------------------------------------
@@ -234,17 +429,14 @@
         return;
       }
 
-      const lat = e.latlng.lat.toFixed(3);
-      const lon = e.latlng.lng.toFixed(3);
-
       L.popup()
         .setLatLng(e.latlng)
         .setContent(
           `<b>Clicked location</b><br>` +
-          `Lat: ${lat}, Lon: ${lon}<br>` +
+          `${fmtLat(e.latlng.lat)}, ${fmtLon(e.latlng.lng)}<br>` +
           `<span style="font-size:11px; color:#666;">` +
-          `Precise elevation values aren't available for arbitrary clicks in this ` +
-          `prototype — pins show real data for known sites.</span>`
+          `Exact elevation isn't available for arbitrary clicks: the layers are ` +
+          `rendered images. Pins show sourced values for known sites.</span>`
         )
         .openOn(map);
     });
@@ -253,8 +445,8 @@
     // STEP 4: Route tool
     // ---------------------------------------------------------
     // Route mode: click two points to draw a line and get the
-    // real great-circle distance between them, computed using
-    // Mars' actual mean radius (not Earth's — a common mistake).
+    // great-circle distance between them, computed using Mars'
+    // mean radius (not Earth's — a common mistake).
     const MARS_RADIUS_KM = 3389.5;
 
     let routeModeActive = false;
@@ -270,14 +462,14 @@
       routeToggleBtn.textContent = routeModeActive
         ? '✖ Exit Route Mode'
         : '📍 Start Route Mode';
-      routeToggleBtn.style.borderColor = routeModeActive ? '#4caf50' : '#e8a87c';
-      routeToggleBtn.style.color = routeModeActive ? '#4caf50' : '#e8a87c';
+      routeToggleBtn.classList.toggle('active', routeModeActive);
 
       if (routeModeActive) {
         clearRoute();
         routeInfoEl.style.display = 'block';
         routeInfoEl.textContent = 'Click a start point on the map.';
       } else {
+        clearRoute();
         routeInfoEl.style.display = 'none';
       }
     });
@@ -311,20 +503,22 @@
           .addTo(map);
 
         const distanceKm = marsSurfaceDistance(routePoints[0], routePoints[1]);
+        const distanceMi = distanceKm * 0.621371;
 
         routeInfoEl.innerHTML =
           `<b>Route</b><br>` +
-          `Start: ${routePoints[0].lat.toFixed(2)}, ${routePoints[0].lng.toFixed(2)}<br>` +
-          `End: ${routePoints[1].lat.toFixed(2)}, ${routePoints[1].lng.toFixed(2)}<br>` +
-          `Distance: <b>${distanceKm.toFixed(1)} km</b> (straight-line, Mars surface)<br>` +
-          `<span style="font-size:11px; color:#999;">Elevation-change-along-route ` +
-          `requires point elevation data not yet available in this prototype.</span><br>` +
+          `Start: ${fmtLat(routePoints[0].lat)}, ${fmtLon(routePoints[0].lng)}<br>` +
+          `End: ${fmtLat(routePoints[1].lat)}, ${fmtLon(routePoints[1].lng)}<br>` +
+          `Distance: <b>${distanceKm.toFixed(1)} km</b> (${distanceMi.toFixed(1)} mi)<br>` +
+          `<span style="font-size:11px; color:#999;">Measured along the curved surface. ` +
+          `The line looks straight because the map is flat. Elevation change along the ` +
+          `route isn't available: there is no point-elevation data source yet.</span><br>` +
           `<span style="font-size:11px; color:#999;">Click anywhere to start a new route.</span>`;
       }
     }
 
     // Great-circle distance between two lat/lon points, along
-    // Mars' actual surface (haversine formula, Mars radius).
+    // Mars' surface (haversine formula, Mars mean radius).
     function marsSurfaceDistance(p1, p2) {
       const toRad = deg => deg * Math.PI / 180;
       const dLat = toRad(p2.lat - p1.lat);
