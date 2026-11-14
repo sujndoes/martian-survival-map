@@ -4,6 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Interplanetary Survival Guide: Martian Map</title>
+  <meta name="description" content="A layered Mars map built from NASA mission data, with a guided traverse from Curiosity's landing site toward Mount Sharp." />
+  <meta name="theme-color" content="#0b0b0f" />
+  <link rel="preconnect" href="https://trek.nasa.gov" />
+  <link rel="preconnect" href="https://api.nasa.gov" />
+  <link rel="dns-prefetch" href="https://services.arcgis.com" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23b5532a'/%3E%3C/svg%3E" />
 
   <!-- Leaflet core (from CDN, no build step needed) -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
@@ -11,8 +17,8 @@
 
   <style>
     :root {
-      --panel-bg: rgba(20, 15, 15, 0.88);
-      --accent: #e8a87c;
+      --panel-bg: rgba(17, 20, 26, 0.92);
+      --accent: #d4946a;
       --ok: #4caf50;
       --warn: #f0b44c;
       --text: #eee;
@@ -27,35 +33,31 @@
     }
     #map { width: 100%; height: 100vh; background: #0b0b0f; }
 
-    /* ---------- Top bar ---------- */
+    /* ---------- Header ---------- */
     #title-bar {
-      position: absolute;
-      top: 12px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 1000;
-      background: var(--panel-bg);
-      color: var(--accent);
-      padding: 8px 18px;
-      border-radius: 8px;
-      font-size: 14px;
-      letter-spacing: 0.5px;
-      pointer-events: none;
-      white-space: nowrap;
+      position: absolute; top: 0; left: 0; right: 0; height: 44px; z-index: 1000;
+      display: flex; align-items: center; gap: 12px; padding: 0 16px;
+      background: var(--panel-bg); border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+      backdrop-filter: blur(4px); pointer-events: none; color: var(--text);
     }
+    #title-bar .t1 { font-size: 14px; font-weight: 600; letter-spacing: 0.3px; }
+    #title-bar .t2 { font-size: 12px; color: var(--muted); padding-left: 12px; border-left: 1px solid rgba(255, 255, 255, 0.18); }
+    .leaflet-top.leaflet-right { margin-top: 56px; }
 
     /* ---------- Left column ---------- */
     #left-panel {
       position: absolute;
-      top: 12px;
+      top: 56px;
       left: 12px;
       bottom: 70px;
       z-index: 1000;
       display: flex;
       flex-direction: column;
       gap: 8px;
-      width: 250px;
+      width: 270px;
       overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.18) transparent;
       pointer-events: none;           /* let the map receive clicks between panels */
     }
     #left-panel > * { pointer-events: auto; }
@@ -66,6 +68,8 @@
       padding: 10px 12px;
       font-size: 13px;
       line-height: 1.5;
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      backdrop-filter: blur(4px);
     }
     .panel label {
       display: block;
@@ -79,31 +83,46 @@
     select, input[type="number"] {
       width: 100%;
       box-sizing: border-box;
-      background: #1b1414;
+      background: #0f1217;
       color: var(--text);
-      border: 1px solid #5a4636;
+      border: 1px solid rgba(255,255,255,0.18);
       border-radius: 6px;
       padding: 6px 8px;
       font-size: 13px;
     }
     button.btn {
-      background: var(--panel-bg);
-      color: var(--accent);
-      border: 1px solid var(--accent);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      border: 1px solid rgba(255, 255, 255, 0.18);
       padding: 8px 14px;
       border-radius: 6px;
       font-size: 13px;
       cursor: pointer;
       text-align: left;
     }
-    button.btn:hover { background: rgba(60, 40, 30, 0.95); }
-    button.btn.active { color: var(--ok); border-color: var(--ok); }
+    button.btn:hover { background: rgba(255, 255, 255, 0.09); border-color: var(--accent); }
+    button.btn.active { color: var(--accent); border-color: var(--accent); }
+    button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible {
+      outline: 2px solid var(--accent); outline-offset: 2px;
+    }
+    #mission-card p { margin: 0; }
+    #mission-card p.goal { margin: 2px 0 10px; font-size: 12px; color: #ccc; }
+    .step-head { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+    .step-badge { background: rgba(212, 148, 106, 0.18); color: var(--accent); border-radius: 10px;
+      padding: 1px 8px; font-size: 11px; white-space: nowrap; }
+    .step-text { margin-top: 4px; font-size: 12.5px; }
+    .leg { margin-top: 8px; padding: 5px 8px; border-left: 3px solid var(--accent);
+      background: rgba(255, 255, 255, 0.05); border-radius: 0 6px 6px 0; font-size: 12px; }
+    .sec { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.10); font-size: 12px; }
+    .sec summary { cursor: pointer; color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; }
+    .sec p { margin-top: 6px; }
     .btn-row { display: flex; gap: 8px; margin-top: 8px; }
     .btn-row button { flex: 1; text-align: center; padding: 6px 8px; }
     .fine { font-size: 11px; color: #999; }
     .warn { color: var(--warn); }
     #mission-card, #route-panel { display: none; }
-    #mission-card h3 { margin: 0 0 4px; font-size: 14px; color: var(--accent); }
+    #mission-card h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; color: var(--text); }
     #mission-card ol { margin: 6px 0 0; padding-left: 18px; }
     #route-summary b { color: #fff; }
 
@@ -144,8 +163,8 @@
     #legend .ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
     #sources { font-size: 12px; }
     #sources ul { margin: 6px 0 0; padding-left: 18px; }
-    #sources a, .leaflet-popup-content a { color: #7ab8ff; }
-    #sources a:visited, .leaflet-popup-content a:visited { color: #b69be6; }
+    #sources a, #mission-card a, .leaflet-popup-content a { color: #7ab8ff; }
+    #sources a:visited, #mission-card a:visited, .leaflet-popup-content a:visited { color: #b69be6; }
     #layer-notice { font-size: 12px; }
 
     #status-bar {
@@ -161,7 +180,7 @@
     #sources-btn {
       background: var(--panel-bg);
       color: var(--accent);
-      border: 1px solid #5a4636;
+      border: 1px solid rgba(255,255,255,0.18);
       border-radius: 6px;
       padding: 5px 10px;
       font-size: 12px;
@@ -171,17 +190,18 @@
     #loading.show { display: inline-flex; }
     .spinner {
       width: 12px; height: 12px;
-      border: 2px solid #6b5444;
+      border: 2px solid #4a4f58;
       border-top-color: var(--accent);
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    .leaflet-control-layers { background: var(--panel-bg); color: var(--text); border: none; }
+    .leaflet-control-layers { background: var(--panel-bg); color: var(--text); border: 1px solid rgba(255, 255, 255, 0.10); border-radius: 6px; }
     .poi-source { font-size: 11px; color: #666; margin-top: 4px; display: block; }
+    #mission-card .poi-source { color: #aaa; }
     .wp-label {
-      background: rgba(20, 15, 15, 0.85);
+      background: rgba(17, 20, 26, 0.9);
       color: #fff;
       border: 1px solid var(--ok);
       border-radius: 10px;
@@ -191,14 +211,15 @@
 
     @media (max-width: 640px) {
       #title-bar { display: none; }
-      #left-panel { width: 200px; }
-      #right-stack { width: 220px; }
+      #left-panel { width: min(250px, calc(100vw - 80px)); top: 12px; bottom: 60px; }
+      .leaflet-top.leaflet-right { margin-top: 12px; }
+      #right-stack { width: min(260px, calc(100vw - 24px)); bottom: 100px; }
     }
   </style>
 </head>
 <body>
 
-  <div id="title-bar">🔴 Interplanetary Survival Guide — Martian Map</div>
+  <header id="title-bar"><span class="t1">Interplanetary Survival Guide</span><span class="t2">Martian Map</span></header>
   <div id="map"></div>
 
   <div id="left-panel">
@@ -209,10 +230,10 @@
       </select>
     </div>
 
-    <button id="mission-toggle" class="btn" type="button">🧭 Open Mission: Gale → Mount Sharp</button>
+    <button id="mission-toggle" class="btn" type="button">Mission: landing site to Mount Sharp</button>
 
 
-    <button id="route-toggle" class="btn" type="button">📍 Plan Route</button>
+    <button id="route-toggle" class="btn" type="button">Plan route</button>
 
     <div id="route-panel" class="panel" aria-live="polite">
       <div id="route-summary">Click a start point on the map.</div>
@@ -226,14 +247,23 @@
     </div>
 
     <div id="mission-card" class="panel">
-      <h3>Mission: Gale Crater → Mount Sharp</h3>
-      <div><b>Science goal:</b> examine the layered terrain of the Mount Sharp region, where Curiosity studied boxwork formations (the example used in NASA's challenge brief).</div>
-      <ol>
-        <li>Start at Bradbury Landing (Curiosity's 2012 landing site, marked on the map).</li>
-        <li>Layers (top right) are switched on for you. Zoom in on Gale to see CTX detail, and toggle elevation, thermal infrared and geologic units to compare.</li>
-        <li>Press <b>Plan Route</b>, then click waypoints. Total distance and an estimated walking time update as you go.</li>
-      </ol>
-      <div class="fine" style="margin-top:6px;">Data types in view: optical (Viking, CTX), topographic (MOLA), thermal infrared (THEMIS), geologic (USGS). No radiation or hazard layer yet.</div>
+      <h3>Mission: landing site to Mount Sharp</h3>
+      <p class="goal"><b>Goal:</b> follow the first leg of Curiosity's route to the foot of Mount Sharp, toward the boxwork formations studied in 2025 (not mapped here).</p>
+      <div id="mission-step"></div>
+      <div class="btn-row">
+        <button id="stop-prev" class="btn" type="button">Back</button>
+        <button id="stop-next" class="btn" type="button">Next stop</button>
+      </div>
+      <details class="sec" open>
+        <summary>Radiation reference</summary>
+        <p>Curiosity's RAD instrument measured an average of about 0.67 mSv/day from galactic cosmic rays on the surface at Gale (Aug 2012 to Jun 2013, near solar maximum), versus about 1.8 mSv/day in transit. Round-trip transit adds about 0.66 Sv, and 500 days at the surface rate adds about 0.34 Sv (0.67 mSv/day × 500 days), so a 500-day surface mission totals around 1 Sv. Solar storms add short-term doses. This is a reference value, not a map layer.</p>
+        <span class="poi-source"><a href="https://www.swri.org/press-release/swri-scientists-publish-first-radiation-measurements-surface-mars" target="_blank" rel="noopener">Source: SwRI press release on Hassler et al., Science (2013)</a></span>
+      </details>
+      <details class="sec" open>
+        <summary>Known limits</summary>
+        <p class="warn">Legs are straight lines between stops, not the rover's path. No slope or elevation along legs, no rock or hazard map, geologic units from a 1:20,000,000 map (regional context, not walking scale), no live space-weather data, and suit mobility is only the pace you set. Stop positions were read from NASA's labeled traverse map (within a few hundred meters).</p>
+      </details>
+      <p class="fine" style="margin-top:8px;">Toggle MOLA, THEMIS and geologic units in the layers box to compare data types.</p>
     </div>
   </div>
 
@@ -243,7 +273,7 @@
     <div id="legend" class="panel">
       <div><b>MOLA elevation</b></div>
       <div class="bar"></div>
-      <div class="ends"><span>Low (Hellas floor ≈ −7.2 km)</span><span>High (Olympus Mons ≈ +21.9 km)</span></div>
+      <div class="ends"><span>Low (Hellas basin)</span><span>High (volcanoes such as Olympus Mons)</span></div>
       <div class="fine" style="margin-top:4px;">Colors are qualitative: they show relative height, not exact values.</div>
     </div>
 
@@ -254,9 +284,10 @@
         <li>Elevation overlay: Mars Global Surveyor MOLA colorized shaded relief (463 m/px), NASA, via Mars Trek.</li>
         <li>Thermal overlay: Mars Odyssey THEMIS daytime infrared controlled mosaic (100 m/px), NASA / ASU, via Mars Trek. Infrared brightness, not a temperature map.</li>
         <li>High-resolution imagery: MRO Context Camera (CTX) Gale Crater mosaic, NASA / JPL / Malin Space Science Systems, via Mars Trek.</li>
-        <li>Geologic units: Tanaka et al. (2014), <a href="https://pubs.usgs.gov/sim/3292" target="_blank" rel="noopener">Geologic Map of Mars, USGS SIM 3292</a> (1:20,000,000), served by the USGS Astrogeology Science Center on ArcGIS.</li>
+        <li>Geologic units: Tanaka et al. (2014), <a href="https://pubs.usgs.gov/sim/3292" target="_blank" rel="noopener">Geologic Map of Mars, USGS SIM 3292</a> (1:20,000,000, regional scale only), served by the USGS Astrogeology Science Center on ArcGIS.</li>
+        <li>Mission stops: positions read from the NASA/JPL traverse map <a href="https://photojournal.jpl.nasa.gov/catalog/PIA21144" target="_blank" rel="noopener">PIA21144</a>; each stop card links its NASA/JPL source and a surface photo. Radiation figures: SwRI release on Hassler et al. (2013).</li>
         <li>Map library: <a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a> 1.9.4 (BSD-2-Clause).</li>
-        <li>Site figures: each marker's popup links its source.</li>
+        <li>Site figures: NASA pages, linked in each marker's popup.</li>
         <li>Route distance: haversine formula, Mars mean radius 3,389.5 km. Walking time uses the pace you enter.</li>
       </ul>
     </div>
@@ -266,7 +297,7 @@
     <div id="status-bar">
       <span id="loading" class="chip" role="status"><span class="spinner"></span><span>Loading Mars tiles…</span></span>
       <span id="coords" class="chip">Hover the map for coordinates</span>
-      <button id="sources-btn" type="button" aria-expanded="false">ℹ Data &amp; credits</button>
+      <button id="sources-btn" type="button" aria-expanded="false">Data and credits</button>
     </div>
   </div>
 
@@ -274,8 +305,8 @@
     // ---------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------
-    const fmtLat = lat => `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? 'N' : 'S'}`;
-    const fmtLon = lon => `${Math.abs(lon).toFixed(2)}°${lon >= 0 ? 'E' : 'W'}`;
+    const fmtLat = lat => `${Math.abs(lat).toFixed(3)}°${lat >= 0 ? 'N' : 'S'}`;
+    const fmtLon = lon => `${Math.abs(lon).toFixed(3)}°${lon >= 0 ? 'E' : 'W'}`;
     // Escape text that comes from a remote service before putting it in HTML
     const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
       c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -288,6 +319,8 @@
     // EPSG:3857 used for Earth maps). Set explicitly on purpose.
     const map = L.map('map', {
       crs: L.CRS.EPSG4326,
+      preferCanvas: true,        // draw geologic polygons and route markers on one canvas
+      wheelDebounceTime: 80,     // fewer tile requests while scrolling to zoom
       minZoom: 1,
       // Fine zoom steps so the whole planet can fill the window; with whole
       // steps only, fitBounds stops at the largest step that fits and leaves wide margins.
@@ -307,6 +340,9 @@
       if (map.getZoom() <= 3) map.fitBounds(marsBounds);
     });
 
+    // Request tiles only when the view settles (not on every animation frame of a zoom or fly-to)
+    L.TileLayer.mergeOptions({ updateWhenIdle: true, updateWhenZooming: false, keepBuffer: 4, updateInterval: 150 });
+
     const TREK = 'https://api.nasa.gov/mars-wmts/catalog';
     const tileUrl = product => `${TREK}/${product}/1.0.0/default/default028mm/{z}/{y}/{x}.jpg`;
     // Newer layers use Mars Trek's own tile host, copied from the URLs its viewer requests
@@ -315,7 +351,7 @@
 
     // Viking color mosaic: general-purpose optical basemap
     const marsLayer = L.tileLayer(tileUrl('Mars_Viking_MDIM21_ClrMosaic_global_232m'), {
-      attribution: 'Imagery: NASA / JPL / USGS — via Mars Trek',
+      attribution: 'Imagery: NASA / JPL / USGS, via Mars Trek',
       tileSize: 256, noWrap: true, errorTileUrl: '',
       maxNativeZoom: 7   // conservative guess at this mosaic's top level; deeper zooms upscale
     });
@@ -326,7 +362,7 @@
     // ---------------------------------------------------------
     // MOLA colorized shaded relief (topographic)
     const elevationLayer = L.tileLayer(tileUrl('Mars_MGS_MOLA_ClrShade_merge_global_463m'), {
-      attribution: 'Elevation: NASA MGS/MOLA — via Mars Trek',
+      attribution: 'Elevation: NASA MGS/MOLA, via Mars Trek',
       tileSize: 256, noWrap: true, opacity: 0.65,
       maxNativeZoom: 6
     });
@@ -334,7 +370,7 @@
     // THEMIS daytime infrared (thermal): global 100 m mosaic.
     // Product name and tile format (.png) copied from Mars Trek's own requests.
     const thermalLayer = L.tileLayer(trekTileUrl('THEMIS_DayIR_ControlledMosaics_100m_v2_oct2018', 'png'), {
-      attribution: 'Thermal IR: NASA Mars Odyssey THEMIS / ASU — via Mars Trek',
+      attribution: 'Thermal IR: NASA Mars Odyssey THEMIS / ASU, via Mars Trek',
       tileSize: 256, noWrap: true, opacity: 0.7,
       maxNativeZoom: 8
     });
@@ -344,7 +380,7 @@
     // approximate; the mosaic's true footprint is not confirmed.
     const GALE_BOUNDS = L.latLngBounds([-9, 133.5], [0, 142]);
     const galeCtxLayer = L.tileLayer(trekTileUrl('Gale_CTX_BlockAdj_dd', 'png'), {
-      attribution: 'Gale CTX: NASA / JPL / MSSS (MRO Context Camera) — via Mars Trek',
+      attribution: 'Gale CTX: NASA / JPL / MSSS (MRO Context Camera), via Mars Trek',
       tileSize: 256, noWrap: true,
       bounds: GALE_BOUNDS,
       minZoom: 5,   // a regional mosaic is pointless at planet scale
@@ -361,9 +397,9 @@
         'Gale CTX imagery (high-res)': galeCtxLayer,
         'MOLA Elevation': elevationLayer,
         'THEMIS Thermal IR': thermalLayer,
-        'Geologic units (USGS)': geoGroup
+        'Geologic units (USGS, 1:20M regional)': geoGroup
       },
-      { collapsed: false, position: 'topright' }
+      { collapsed: window.innerWidth < 700, position: 'topright' }
     ).addTo(map);
 
     // ---------------------------------------------------------
@@ -442,6 +478,8 @@
         where: '1=1',
         geometry: `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`,
         geometryType: 'esriGeometryEnvelope',
+        inSR: '4326',    // the envelope above is in lon/lat degrees
+        outSR: '4326',   // ask for lon/lat back so polygons line up with the map
         spatialRel: 'esriSpatialRelIntersects',
         outFields: 'Unit,UnitDesc',
         returnGeometry: 'true',
@@ -465,7 +503,7 @@
             layer.bindPopup(
               `<b>Geologic unit ${esc(p.Unit)}</b><br>` +
               (p.UnitDesc ? `${esc(p.UnitDesc)}<br>` : '') +
-              `<span class="poi-source">Colors only tell units apart; they don't show age or type. ` +
+              `<span class="poi-source">Mapped at 1:20,000,000: regional context only. Colors only tell units apart; they don't show age or type. ` +
               `Unit codes are defined in the ` +
               `<a href="https://pubs.usgs.gov/sim/3292" target="_blank" rel="noopener">USGS Geologic Map of Mars (SIM 3292)</a>. ` +
               `Tanaka et al., 2014.</span>`
@@ -473,7 +511,11 @@
           }
         }).addTo(geoGroup);
         const n = (data.features || []).length;
-        setNotice('geo', n >= 500 ? 'Showing the first 500 geologic units in view. Zoom in for the rest.' : null);
+        const msgs = [];
+        if (n >= 500) msgs.push('Showing the first 500 geologic units in view. Zoom in for the rest.');
+        // Source map is 1:20,000,000: fine for regional context, not for walking-scale decisions
+        if (map.getZoom() >= 8) msgs.push('Geologic units come from a 1:20,000,000 map: boundaries are regional and not reliable at this zoom. Use for context, not route planning.');
+        setNotice('geo', msgs.length ? msgs.join(' ') : null);
       } catch (err) {
         if (err.name === 'AbortError') return;
         console.warn('Geology load failed:', err);
@@ -518,44 +560,44 @@
       {
         name: 'Jezero Crater',
         lat: 18.38, lon: 77.58, zoom: 5,
-        stat: 'Crater floor: about 2,700 m below the datum',
-        note: 'Perseverance rover landing site (2021). Ancient river delta, prime astrobiology target.',
-        source: { label: 'DLR / Mars Express HRSC topography of Jezero', url: 'https://www.dlr.de/en/latest/news/2020/03/20200929_topography-of-jezero-crater' }
+        stat: 'Ancient lake up to about 35 km wide and 30 m deep (NASA)',
+        note: 'Perseverance rover landing site (2021). Formed by an impact almost 4 billion years ago; ancient river delta and a prime astrobiology target.',
+        source: { label: 'NASA: Perseverance deciphers ancient history of a Martian lake', url: 'https://www.nasa.gov/missions/mars-2020-perseverance/perseverance-rover/nasas-perseverance-rover-deciphers-ancient-history-of-martian-lake' }
       },
       {
         name: 'Olympus Mons',
         lat: 18.65, lon: -133.8, zoom: 4,
-        stat: 'Summit: over 21.9 km above the datum (MOLA)',
-        note: 'Tallest known volcano in the solar system. Local relief from the foot of its northwest cliffs is over 21 km.',
-        source: { label: 'Wikipedia: Olympus Mons (citing MOLA)', url: 'https://en.wikipedia.org/wiki/Olympus_Mons' }
+        stat: 'More than 40 km tall from base to summit (NASA); base about the area of Arizona',
+        note: 'Largest volcano in the solar system. Quoted heights vary with the reference level used.',
+        source: { label: 'NASA Science: Mars Facts', url: 'https://science.nasa.gov/mars/facts/' }
       },
       {
         name: 'Valles Marineris',
         lat: -13.9, lon: -59.2, zoom: 3,
-        stat: 'Length about 4,000 km; depth up to about 10 km',
-        note: 'Canyon system just south of the equator. Melas Chasma holds its deepest point.',
-        source: { label: 'Space.com: Valles Marineris facts', url: 'https://www.space.com/20446-valles-marineris.html' }
+        stat: 'About 3,870 km long, up to 600 km wide, up to 9.3 km deep (rim to floor)',
+        note: 'Largest canyon system in the solar system, just south of the equator. Long enough to stretch from California to New York.',
+        source: { label: 'NASA Science: Mars Facts', url: 'https://science.nasa.gov/mars/facts/' }
       },
       {
         name: 'Gale Crater',
         lat: -5.4, lon: 137.8, zoom: 6,
-        stat: 'Northwest crater floor: minimum about 4,670 m below the datum (MOLA areoid)',
+        stat: 'About 154 km across; Mount Sharp rises about 5.5 km above the crater floor',
         note: 'Curiosity rover landing site (2012), at the foot of the layered mound Aeolis Mons (Mount Sharp).',
-        source: { label: 'Gale crater: the MSL/Curiosity landing site (Int. J. Astrobiology)', url: 'https://core-cms.cambridgecore.org/core/services/aop-cambridge-core/content/view/61967227D1AAFCE4E5CE1CE0620C78B0/S1473550412000328a.pdf/gale-crater-the-mars-science-laboratorycuriosity-rover-landing-site.pdf' }
+        source: { label: 'NASA/JPL: Mount Sharp inside Gale Crater', url: 'https://science.nasa.gov/resource/mount-sharp-inside-gale-crater-mars/' }
       },
       {
         name: 'Bradbury Landing (Curiosity)',
-        lat: -4.5, lon: 137.4, zoom: 9,
-        stat: 'Landing ellipse about 4,400 m below the datum',
-        note: 'Curiosity touched down here in 2012 on the northwest floor of Gale, near the foot of Mount Sharp. Start point for the Gale mission.',
-        source: { label: 'Wikipedia: Gale (crater)', url: 'https://en.wikipedia.org/wiki/Gale_(crater)' }
+        lat: -4.59, lon: 137.44, zoom: 10,
+        stat: 'Curiosity landed here on Aug 5, 2012 (PDT)',
+        note: 'Touched down on the northwest floor of Gale, near the foot of Mount Sharp. Start point for the Gale mission. Position read from NASA/JPL traverse map PIA21144.',
+        source: { label: 'NASA: Destination Gale Crater in August 2012', url: 'https://www.nasa.gov/image-article/destination-gale-crater-august-2012' }
       },
       {
         name: 'Hellas Planitia',
         lat: -42.4, lon: 70.5, zoom: 3,
-        stat: 'Floor: about 7,152 m below the datum',
-        note: 'Giant impact basin, roughly 2,300 km across. Among the lowest places on Mars.',
-        source: { label: 'Wikipedia: Hellas Planitia', url: 'https://en.wikipedia.org/wiki/Hellas_Planitia' }
+        stat: 'About 2,300 km across; its floor holds the lowest elevations on Mars',
+        note: 'Ancient impact structure, the deepest and broadest enclosed basin on Mars.',
+        source: { label: 'NASA/JPL: HiRISE, “To Great Depths” (PIA21570)', url: 'https://science.nasa.gov/photojournal/to-great-depths' }
       }
     ];
 
@@ -611,26 +653,95 @@
     });
 
     // ---------------------------------------------------------
-    // Mission mode: Gale Crater → Mount Sharp
+    // Mission mode: guided traverse, landing site -> foot of Mount Sharp
+    // Positions read from NASA/JPL map PIA21144 using its lat/lon grid.
     // ---------------------------------------------------------
+    const STOPS = [
+      { name: 'Bradbury Landing', lat: -4.590, lon: 137.441, zoom: 11,
+        text: 'Curiosity touched down here in August 2012 on the plains north of Mount Sharp. Every drive in this mission starts from this point.',
+        photo: { label: 'Mount Sharp from the plains near the landing site (Mastcam, 2013)', url: 'https://photojournal.jpl.nasa.gov/catalog/PIA16768' },
+        src: { label: 'NASA/JPL map PIA21144 (star = landing site)', url: 'https://photojournal.jpl.nasa.gov/catalog/PIA21144' } },
+      { name: 'Yellowknife Bay', lat: -4.590, lon: 137.450, zoom: 11,
+        text: 'A shallow depression very close to the landing site. Drilled mudstone here showed an ancient lakebed with fresh water, key chemical elements for life and a chemical energy source, which met the mission\'s main habitability goal.',
+        photo: { label: 'Panorama from inside Yellowknife Bay (Mastcam, PIA16701)', url: 'https://science.nasa.gov/photojournal/view-from-inside-yellowknife-bay/' },
+        src: { label: 'NASA/JPL: first Mars age measurement and human exploration', url: 'https://www.jpl.nasa.gov/news/nasa-curiosity-first-mars-age-measurement-and-human-exploration-help' } },
+      { name: 'Pahrump Hills', lat: -4.663, lon: 137.378, zoom: 11,
+        text: 'The first outcrop of Mount Sharp\'s base layer, the Murray formation. From Yellowknife Bay the rover drove more than 8 km in about 15 months, with pauses at science waypoints. That is longer than the straight line drawn here.',
+        photo: { label: 'Mastcam vista of the outcrop (PIA18608)', url: 'https://photojournal.jpl.nasa.gov/catalog/PIA18608' },
+        src: { label: 'NASA/JPL: rover drill pulls first taste from Mars mountain', url: 'https://www.jpl.nasa.gov/news/nasa-rover-drill-pulls-first-taste-from-mars-mountain/' } },
+      { name: 'Murray Buttes', lat: -4.691, lon: 137.355, zoom: 11,
+        text: 'Chosen early as the access point to Mount Sharp because of a gap in the band of dark dune fields at its base. The team picked the route as the safest path for the rover\'s wheels, a reminder that real routes bend around hazards.',
+        photo: { label: '360° Mastcam panorama amid Murray Buttes (PIA20840)', url: 'https://science.nasa.gov/photojournal/rovers-panorama-taken-amid-murray-buttes-on-mars/' },
+        src: { label: 'NASA/JPL: first 663 sols traverse (PIA18392)', url: 'https://www.jpl.nasa.gov/images/pia18392-curiosity-rovers-traverse-first-663-sols-on-mars/' } }
+    ];
+
     const missionBtn = document.getElementById('mission-toggle');
     const missionCard = document.getElementById('mission-card');
+    const stepEl = document.getElementById('mission-step');
+    const prevBtn = document.getElementById('stop-prev');
+    const nextBtn = document.getElementById('stop-next');
+    const traverseGroup = L.layerGroup();
     let missionOpen = false;
+    let stepIdx = 0;
+
+    // Refreshes the card text only (no camera move), so editing the pace doesn't re-fly the map
+    function renderStopCard() {
+      const s = STOPS[stepIdx];
+      let leg = '';
+      if (stepIdx > 0) {
+        const p = STOPS[stepIdx - 1];
+        const d = marsSurfaceDistance({ lat: p.lat, lng: p.lon }, { lat: s.lat, lng: s.lon });
+        leg = `<div class="leg">Leg from stop ${stepIdx} (straight line): <b>${d.toFixed(2)} km</b> &middot; about <b>${fmtDuration(d / currentPace())}</b> on foot at ${currentPace()} km/h</div>`;
+      }
+      stepEl.innerHTML =
+        `<div class="step-head"><span class="step-badge">Stop ${stepIdx + 1} of ${STOPS.length}</span><b>${s.name}</b></div>` +
+        `<span class="fine">${fmtLat(s.lat)}, ${fmtLon(s.lon)}</span><div class="step-text">${s.text}</div>${leg}` +
+        `<span class="poi-source">Source: <a href="${s.src.url}" target="_blank" rel="noopener">${s.src.label}</a></span>` +
+        `<span class="poi-source">See what the rover saw: <a href="${s.photo.url}" target="_blank" rel="noopener">${s.photo.label}</a></span>`;
+      prevBtn.disabled = stepIdx === 0;
+      nextBtn.disabled = stepIdx === STOPS.length - 1;
+    }
+
+    // Card text plus camera move, for changing stops
+    function renderStop() {
+      renderStopCard();
+      const s = STOPS[stepIdx];
+      map.flyTo([s.lat, s.lon], s.zoom, { duration: 1.2 });
+    }
+
+    function drawTraverse() {
+      traverseGroup.clearLayers();
+      L.polyline(STOPS.map(s => [s.lat, s.lon]), { color: '#d4946a', weight: 3, dashArray: '6 6' }).addTo(traverseGroup);
+      STOPS.forEach((s, i) => {
+        L.circleMarker([s.lat, s.lon], { radius: 7, color: '#d4946a', fillColor: '#d4946a', fillOpacity: 0.9, bubblingMouseEvents: false })
+          .bindTooltip(String(i + 1), { permanent: true, direction: 'top', offset: [0, -6], className: 'wp-label' })
+          .on('click', () => {
+            if (routeModeActive) { addWaypoint(L.latLng(s.lat, s.lon)); return; }   // route mode wins
+            stepIdx = i; renderStop();
+          })
+          .addTo(traverseGroup);
+      });
+      traverseGroup.addTo(map);
+    }
 
     missionBtn.addEventListener('click', () => {
       missionOpen = !missionOpen;
       missionCard.style.display = missionOpen ? 'block' : 'none';
       missionBtn.classList.toggle('active', missionOpen);
-      missionBtn.textContent = missionOpen ? '✖ Close Mission' : '🧭 Open Mission: Gale → Mount Sharp';
+      missionBtn.textContent = missionOpen ? 'Close mission' : 'Mission: landing site to Mount Sharp';
       if (missionOpen) {
-        const start = pointsOfInterest.findIndex(p => p.name.startsWith('Bradbury'));
-        map.flyTo([-5.0, 137.6], 8, { duration: 1.4 });
-        map.once('moveend', () => poiMarkers[start].openPopup());
         // Adding the layer in code also ticks its box in the layers control
         if (!map.hasLayer(galeCtxLayer)) galeCtxLayer.addTo(map);
-        if (!map.hasLayer(geoGroup)) geoGroup.addTo(map);
+        stepIdx = 0;
+        drawTraverse();
+        renderStop();
+      } else {
+        map.removeLayer(traverseGroup);
       }
     });
+    prevBtn.addEventListener('click', () => { if (stepIdx > 0) { stepIdx--; renderStop(); } });
+    nextBtn.addEventListener('click', () => { if (stepIdx < STOPS.length - 1) { stepIdx++; renderStop(); } });
+    document.getElementById('pace').addEventListener('input', () => { if (missionOpen) renderStopCard(); });
 
     // ---------------------------------------------------------
     // STEP 4: Route planner (multi-waypoint)
@@ -706,7 +817,7 @@
 
     routeToggleBtn.addEventListener('click', () => {
       routeModeActive = !routeModeActive;
-      routeToggleBtn.textContent = routeModeActive ? '✖ Exit Route Planning' : '📍 Plan Route';
+      routeToggleBtn.textContent = routeModeActive ? 'Exit route planning' : 'Plan route';
       routeToggleBtn.classList.toggle('active', routeModeActive);
       routePanel.style.display = routeModeActive ? 'block' : 'none';
       if (!routeModeActive) { routePoints.length = 0; renderRoute(); }
