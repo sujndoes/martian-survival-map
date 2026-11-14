@@ -107,19 +107,32 @@
     #mission-card ol { margin: 6px 0 0; padding-left: 18px; }
     #route-summary b { color: #fff; }
 
-    /* ---------- Bottom-left stack ---------- */
+    /* ---------- Bottom-left: status bar only ---------- */
     #bottom-left {
       position: absolute;
       bottom: 12px;
       left: 12px;
       z-index: 1000;
+      max-width: 360px;
+    }
+
+    /* ---------- Right stack: notices, legend, credits ----------
+       Kept on the right (under the layers box, above the zoom buttons)
+       so it can never cover the left control panel. */
+    #right-stack {
+      position: absolute;
+      right: 12px;
+      bottom: 110px;
+      z-index: 1000;
+      width: 300px;
+      max-height: calc(100vh - 290px);
+      overflow-y: auto;
       display: flex;
       flex-direction: column;
       gap: 8px;
-      max-width: 360px;
       pointer-events: none;
     }
-    #bottom-left > * { pointer-events: auto; }
+    #right-stack > * { pointer-events: auto; }
     #legend, #sources, #layer-notice { display: none; }
     #legend .bar {
       height: 12px;
@@ -129,7 +142,7 @@
       margin: 4px 0;
     }
     #legend .ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
-    #sources { font-size: 12px; max-height: 38vh; overflow-y: auto; }
+    #sources { font-size: 12px; }
     #sources ul { margin: 6px 0 0; padding-left: 18px; }
     #sources a, .leaflet-popup-content a { color: #7ab8ff; }
     #sources a:visited, .leaflet-popup-content a:visited { color: #b69be6; }
@@ -179,6 +192,7 @@
     @media (max-width: 640px) {
       #title-bar { display: none; }
       #left-panel { width: 200px; }
+      #right-stack { width: 220px; }
     }
   </style>
 </head>
@@ -197,16 +211,6 @@
 
     <button id="mission-toggle" class="btn" type="button">🧭 Open Mission: Gale → Mount Sharp</button>
 
-    <div id="mission-card" class="panel">
-      <h3>Mission: Gale Crater → Mount Sharp</h3>
-      <div><b>Science goal:</b> examine the layered terrain of the Mount Sharp region, where Curiosity studied boxwork formations (the example used in NASA's challenge brief).</div>
-      <ol>
-        <li>Start at Bradbury Landing (Curiosity's 2012 landing site, marked on the map).</li>
-        <li>Switch on layers (top right): elevation, thermal infrared, geologic units.</li>
-        <li>Press <b>Plan Route</b>, then click waypoints. Total distance and an estimated walking time update as you go.</li>
-      </ol>
-      <div class="fine" style="margin-top:6px;">Data types in view: optical (Viking), topographic (MOLA), thermal infrared (THEMIS), geologic (USGS). No radiation or hazard layer yet.</div>
-    </div>
 
     <button id="route-toggle" class="btn" type="button">📍 Plan Route</button>
 
@@ -220,9 +224,20 @@
         <button id="route-clear" class="btn" type="button">Clear</button>
       </div>
     </div>
+
+    <div id="mission-card" class="panel">
+      <h3>Mission: Gale Crater → Mount Sharp</h3>
+      <div><b>Science goal:</b> examine the layered terrain of the Mount Sharp region, where Curiosity studied boxwork formations (the example used in NASA's challenge brief).</div>
+      <ol>
+        <li>Start at Bradbury Landing (Curiosity's 2012 landing site, marked on the map).</li>
+        <li>Layers (top right) are switched on for you. Zoom in on Gale to see CTX detail, and toggle elevation, thermal infrared and geologic units to compare.</li>
+        <li>Press <b>Plan Route</b>, then click waypoints. Total distance and an estimated walking time update as you go.</li>
+      </ol>
+      <div class="fine" style="margin-top:6px;">Data types in view: optical (Viking, CTX), topographic (MOLA), thermal infrared (THEMIS), geologic (USGS). No radiation or hazard layer yet.</div>
+    </div>
   </div>
 
-  <div id="bottom-left">
+  <div id="right-stack">
     <div id="layer-notice" class="panel warn" role="status"></div>
 
     <div id="legend" class="panel">
@@ -237,14 +252,17 @@
       <ul>
         <li>Base imagery: Viking MDIM 2.1 Color Mosaic (232 m/px), NASA / JPL / USGS, via <a href="https://trek.nasa.gov/mars/" target="_blank" rel="noopener">NASA Mars Trek</a>.</li>
         <li>Elevation overlay: Mars Global Surveyor MOLA colorized shaded relief (463 m/px), NASA, via Mars Trek.</li>
-        <li>Thermal overlay: Mars Odyssey THEMIS daytime infrared mosaic, NASA / ASU, via Mars Trek. Infrared brightness, not a temperature map.</li>
+        <li>Thermal overlay: Mars Odyssey THEMIS daytime infrared controlled mosaic (100 m/px), NASA / ASU, via Mars Trek. Infrared brightness, not a temperature map.</li>
+        <li>High-resolution imagery: MRO Context Camera (CTX) Gale Crater mosaic, NASA / JPL / Malin Space Science Systems, via Mars Trek.</li>
         <li>Geologic units: Tanaka et al. (2014), <a href="https://pubs.usgs.gov/sim/3292" target="_blank" rel="noopener">Geologic Map of Mars, USGS SIM 3292</a> (1:20,000,000), served by the USGS Astrogeology Science Center on ArcGIS.</li>
         <li>Map library: <a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a> 1.9.4 (BSD-2-Clause).</li>
         <li>Site figures: each marker's popup links its source.</li>
         <li>Route distance: haversine formula, Mars mean radius 3,389.5 km. Walking time uses the pace you enter.</li>
       </ul>
     </div>
+  </div>
 
+  <div id="bottom-left">
     <div id="status-bar">
       <span id="loading" class="chip" role="status"><span class="spinner"></span><span>Loading Mars tiles…</span></span>
       <span id="coords" class="chip">Hover the map for coordinates</span>
@@ -271,7 +289,10 @@
     const map = L.map('map', {
       crs: L.CRS.EPSG4326,
       minZoom: 1,
-      maxZoom: 8,
+      // Fine zoom steps so the whole planet can fill the window; with whole
+      // steps only, fitBounds stops at the largest step that fits and leaves wide margins.
+      zoomSnap: 0.1,
+      maxZoom: 13,   // CTX (about 5 m/px) is usable to about this zoom; global layers upscale beyond their own top level
       worldCopyJump: false,
       zoomControl: false   // re-added bottom-right so it doesn't sit under the left panel
     });
@@ -288,11 +309,15 @@
 
     const TREK = 'https://api.nasa.gov/mars-wmts/catalog';
     const tileUrl = product => `${TREK}/${product}/1.0.0/default/default028mm/{z}/{y}/{x}.jpg`;
+    // Newer layers use Mars Trek's own tile host, copied from the URLs its viewer requests
+    const trekTileUrl = (product, ext) =>
+      `https://trek.nasa.gov/tiles/Mars/EQ/${product}/1.0.0//default/default028mm/{z}/{y}/{x}.${ext}`;
 
     // Viking color mosaic: general-purpose optical basemap
     const marsLayer = L.tileLayer(tileUrl('Mars_Viking_MDIM21_ClrMosaic_global_232m'), {
       attribution: 'Imagery: NASA / JPL / USGS — via Mars Trek',
-      tileSize: 256, noWrap: true, errorTileUrl: ''
+      tileSize: 256, noWrap: true, errorTileUrl: '',
+      maxNativeZoom: 7   // conservative guess at this mosaic's top level; deeper zooms upscale
     });
     marsLayer.addTo(map);
 
@@ -302,14 +327,28 @@
     // MOLA colorized shaded relief (topographic)
     const elevationLayer = L.tileLayer(tileUrl('Mars_MGS_MOLA_ClrShade_merge_global_463m'), {
       attribution: 'Elevation: NASA MGS/MOLA — via Mars Trek',
-      tileSize: 256, noWrap: true, opacity: 0.65
+      tileSize: 256, noWrap: true, opacity: 0.65,
+      maxNativeZoom: 6
     });
 
-    // THEMIS daytime infrared (thermal). UNVERIFIED product name: if the
-    // tiles don't load, a notice appears and the layer can be ignored.
-    const thermalLayer = L.tileLayer(tileUrl('Mars_MO_THEMIS-IR-Day_mosaic_global_100m_v12'), {
+    // THEMIS daytime infrared (thermal): global 100 m mosaic.
+    // Product name and tile format (.png) copied from Mars Trek's own requests.
+    const thermalLayer = L.tileLayer(trekTileUrl('THEMIS_DayIR_ControlledMosaics_100m_v2_oct2018', 'png'), {
       attribution: 'Thermal IR: NASA Mars Odyssey THEMIS / ASU — via Mars Trek',
-      tileSize: 256, noWrap: true, opacity: 0.7
+      tileSize: 256, noWrap: true, opacity: 0.7,
+      maxNativeZoom: 8
+    });
+
+    // Gale Crater CTX mosaic (MRO Context Camera, roughly 5 m/px): regional,
+    // so tile requests are limited to a generous box around Gale. The box is
+    // approximate; the mosaic's true footprint is not confirmed.
+    const GALE_BOUNDS = L.latLngBounds([-9, 133.5], [0, 142]);
+    const galeCtxLayer = L.tileLayer(trekTileUrl('Gale_CTX_BlockAdj_dd', 'png'), {
+      attribution: 'Gale CTX: NASA / JPL / MSSS (MRO Context Camera) — via Mars Trek',
+      tileSize: 256, noWrap: true,
+      bounds: GALE_BOUNDS,
+      minZoom: 5,   // a regional mosaic is pointless at planet scale
+      maxNativeZoom: 12
     });
 
     // USGS geologic units: vector polygons fetched only for the visible
@@ -319,6 +358,7 @@
     L.control.layers(
       null,
       {
+        'Gale CTX imagery (high-res)': galeCtxLayer,
         'MOLA Elevation': elevationLayer,
         'THEMIS Thermal IR': thermalLayer,
         'Geologic units (USGS)': geoGroup
@@ -355,7 +395,8 @@
     const tileStats = {};
     [['imagery', marsLayer, 'Viking imagery'],
      ['elevation', elevationLayer, 'MOLA elevation'],
-     ['thermal', thermalLayer, 'THEMIS thermal']].forEach(([key, layer, label]) => {
+     ['thermal', thermalLayer, 'THEMIS thermal'],
+     ['galeCtx', galeCtxLayer, 'Gale CTX imagery']].forEach(([key, layer, label]) => {
       tileStats[key] = { ok: 0, bad: 0 };
       layer.on('loading', () => { busyLayers.add(key); refreshLoading(); });
       layer.on('load', () => { busyLayers.delete(key); refreshLoading(); });
@@ -384,7 +425,7 @@
       // Stable color per unit code (the service gives codes, not colors)
       let h = 0;
       for (const ch of String(unit)) h = (h * 31 + ch.charCodeAt(0)) % 360;
-      return { color: `hsl(${h}, 70%, 60%)`, weight: 1, fillColor: `hsl(${h}, 70%, 50%)`, fillOpacity: 0.32 };
+      return { color: `hsl(${h}, 70%, 60%)`, weight: 1, fillColor: `hsl(${h}, 70%, 50%)`, fillOpacity: 0.2 };
     }
 
     async function loadGeology() {
@@ -404,7 +445,8 @@
         spatialRel: 'esriSpatialRelIntersects',
         outFields: 'Unit,UnitDesc',
         returnGeometry: 'true',
-        maxAllowableOffset: '0.02',   // simplify outlines (~1 km) to keep the download small
+        // Simplify outlines to about 1.5 screen pixels at the current zoom: small download, still sharp
+        maxAllowableOffset: String(1.5 * (360 / (512 * 2 ** map.getZoom()))),
         geometryPrecision: '3',
         resultRecordCount: '500',
         f: 'geojson'
@@ -423,7 +465,8 @@
             layer.bindPopup(
               `<b>Geologic unit ${esc(p.Unit)}</b><br>` +
               (p.UnitDesc ? `${esc(p.UnitDesc)}<br>` : '') +
-              `<span class="poi-source">Unit codes are defined in the ` +
+              `<span class="poi-source">Colors only tell units apart; they don't show age or type. ` +
+              `Unit codes are defined in the ` +
               `<a href="https://pubs.usgs.gov/sim/3292" target="_blank" rel="noopener">USGS Geologic Map of Mars (SIM 3292)</a>. ` +
               `Tanaka et al., 2014.</span>`
             );
@@ -502,7 +545,7 @@
       },
       {
         name: 'Bradbury Landing (Curiosity)',
-        lat: -4.5, lon: 137.4, zoom: 7,
+        lat: -4.5, lon: 137.4, zoom: 9,
         stat: 'Landing ellipse about 4,400 m below the datum',
         note: 'Curiosity touched down here in 2012 on the northwest floor of Gale, near the foot of Mount Sharp. Start point for the Gale mission.',
         source: { label: 'Wikipedia: Gale (crater)', url: 'https://en.wikipedia.org/wiki/Gale_(crater)' }
@@ -581,9 +624,10 @@
       missionBtn.textContent = missionOpen ? '✖ Close Mission' : '🧭 Open Mission: Gale → Mount Sharp';
       if (missionOpen) {
         const start = pointsOfInterest.findIndex(p => p.name.startsWith('Bradbury'));
-        map.flyTo([-5.0, 137.6], 7, { duration: 1.4 });
+        map.flyTo([-5.0, 137.6], 8, { duration: 1.4 });
         map.once('moveend', () => poiMarkers[start].openPopup());
         // Adding the layer in code also ticks its box in the layers control
+        if (!map.hasLayer(galeCtxLayer)) galeCtxLayer.addTo(map);
         if (!map.hasLayer(geoGroup)) geoGroup.addTo(map);
       }
     });
